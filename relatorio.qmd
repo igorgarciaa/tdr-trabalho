@@ -1,0 +1,162 @@
+---
+title: "Consultas nas unidades básicas de saúde de um município"
+subtitle: "Trabalho intermediário de Tecnologia de Dados"
+author: "Igor Garcia"
+date: today
+lang: pt-BR
+format:
+  html:
+    embed-resources: true
+    toc: true
+execute:
+  echo: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+targets::tar_load(c(
+  cadastro, sem_medicao, conferencia, por_ano, por_mes,
+  por_unidade, por_distrito, distrito_ano,
+  fig_sazonal, fig_distritos, modelo
+
+))
+
+## Formatação brasileira para os números citados no texto e nas tabelas.
+br <- function(x, digitos = 1) {
+  format(
+    round(x, digitos),
+    nsmall = digitos, big.mark = ".", decimal.mark = ","
+  )
+}
+tab <- function(x) {
+  knitr::kable(x, digits = 1, format.args = list(decimal.mark = ","))
+}
+```
+
+## Os dados
+
+Os dados são simulados para o login `igorgarciaa` e tratam das consultas
+realizadas, mês a mês, nas unidades básicas de saúde (UBS) de um
+município, de 2023 a 2025. O cadastro tem `r nrow(cadastro)` unidades,
+das quais `r nrow(cadastro) - nrow(sem_medicao)` têm medições; a
+`r sem_medicao$nome` não tem medição em nenhum ano. Para comparar
+unidades de tamanhos diferentes, a medida relativa é o número de
+consultas por equipe de saúde da família.
+
+A @tbl-conferencia mostra, para cada ano, o número de linhas da tabela
+arrumada, os meses sem registro e a soma das consultas registradas, que
+conferem com o `LEIA-ME.txt`.
+
+```{r}
+#| label: tbl-conferencia
+#| tbl-cap: >
+#|   Conferência da leitura: linhas, meses sem registro e soma das
+#|   consultas registradas em cada ano.
+tab(conferencia)
+```
+
+Um mês sem registro foi tratado como consulta não registrada, e não
+como mês sem consultas, e ficou como valor ausente. A decisão não altera
+os totais, porque somar zero ou ignorar o mês dá o mesmo resultado, mas
+altera as médias, que usam só os meses registrados.
+
+## Sazonalidade
+
+A @fig-sazonal mostra a média mensal de consultas por equipe em cada
+ano. Nos três anos juntos, o mês de maior média é
+`r as.character(por_mes$mes[which.max(por_mes$media)])`
+(`r br(max(por_mes$media))` consultas por equipe) e o de menor é
+`r as.character(por_mes$mes[which.min(por_mes$media)])`
+(`r br(min(por_mes$media))`).
+
+```{r}
+#| label: fig-sazonal
+#| fig-cap: "Média mensal de consultas por equipe, uma linha por ano."
+fig_sazonal
+```
+
+## Variação entre 2023 e 2025
+
+```{r}
+#| label: variacao
+media_ini <- por_ano$media_equipe[por_ano$ano == 2023]
+media_fim <- por_ano$media_equipe[por_ano$ano == 2025]
+variacao <- 100 * (media_fim / media_ini - 1)
+```
+
+A @tbl-ano resume cada ano. A média mensal de consultas por equipe
+passou de `r br(media_ini)` em 2023 para `r br(media_fim)` em 2025, uma
+variação de `r br(variacao)`%. A comparação usa a média, e não o total,
+porque o número de meses com registro muda de um ano para outro (coluna
+`meses`): um ano com mais meses ausentes teria total menor sem que as
+unidades tivessem atendido menos.
+
+```{r}
+#| label: tbl-ano
+#| tbl-cap: >
+#|   Meses com registro, total de consultas e média mensal de consultas
+#|   por equipe em cada ano.
+tab(por_ano)
+```
+
+## Diferenças entre distritos
+
+A @fig-distritos mostra a distribuição das consultas por equipe em cada
+distrito, e a @tbl-distritos traz as médias. A maior média é a do
+distrito
+`r por_distrito$distrito[which.max(por_distrito$media_equipe)]`
+(`r br(max(por_distrito$media_equipe))` consultas por equipe) e a menor,
+a do distrito
+`r por_distrito$distrito[which.min(por_distrito$media_equipe)]`
+(`r br(min(por_distrito$media_equipe))`).
+
+```{r}
+#| label: fig-distritos
+#| fig-cap: >
+#|   Distribuição das consultas por equipe no mês em cada distrito, de
+#|   2023 a 2025.
+fig_distritos
+```
+
+```{r}
+#| label: tbl-distritos
+#| tbl-cap: >
+#|   Unidades, total de consultas e média mensal de consultas por equipe
+#|   em cada distrito.
+tab(por_distrito)
+```
+
+## Modelo
+
+```{r}
+#| label: modelo
+var_ano <- 100 * (exp(coef(modelo)[["ano"]]) - 1)
+ic_ano <- 100 * (exp(confint(modelo)["ano", ]) - 1)
+```
+
+Um modelo linear para o logaritmo das consultas por equipe, com ano, mês
+e distrito como explicativas, estima uma variação de `r br(var_ano)`% ao
+ano nas consultas por equipe, descontados os efeitos de mês e distrito
+(intervalo de 95% de confiança de `r br(ic_ano[1])`% a
+`r br(ic_ano[2])`%).
+
+## Tabelas da Lista 03
+
+A @tbl-unidade resume cada unidade de 2023 a 2025, da maior média de
+consultas por equipe para a menor, e a @tbl-distrito-ano traz o total
+de consultas de cada distrito em cada ano.
+
+```{r}
+#| label: tbl-unidade
+#| tbl-cap: >
+#|   Resumo por unidade: meses com registro, total de consultas e média
+#|   mensal de consultas por equipe.
+tab(por_unidade)
+```
+
+```{r}
+#| label: tbl-distrito-ano
+#| tbl-cap: "Total de consultas de cada distrito em cada ano."
+tab(distrito_ano)
+```

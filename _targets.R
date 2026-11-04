@@ -35,6 +35,7 @@ list(
   tar_target(fig_sazonal, grafico_sazonal(sazonal)),
   tar_target(fig_distritos, grafico_distritos(dados)),
   
-  tar_target(modelo, ajustar_modelo(dados))
+  tar_target(modelo, ajustar_modelo(dados)),
   
+  tar_quarto(relatorio, "relatorio.qmd")
 )
