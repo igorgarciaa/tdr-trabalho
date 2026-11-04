@@ -1,0 +1,29 @@
+Lista 03 --- dados sorteados para o login igorgarciaa
+
+Tema: Consultas nas unidades básicas de saúde de um município
+Unidade de observação: unidade básica de saúde
+
+Arquivos
+
+  consultas_2023.csv, consultas_2024.csv, consultas_2025.csv
+      Uma linha por unidade e uma coluna por mês do ano. A coluna
+      codigo identifica a unidade, e as colunas jan a dez trazem o
+      valor medido: consultas realizadas no mês.
+      Mês sem registro aparece como "-".
+
+  cadastro.csv
+      Uma linha por unidade, com as colunas:
+        codigo        identificador da unidade, o mesmo das medições
+        nome          nome da unidade
+        distrito      categoria: Norte, Sul, Leste ou Oeste
+        equipes       porte: equipes de saúde da família
+
+Conferência
+
+  unidades no cadastro:   12
+  unidades com medições:  11
+
+  ano    meses sem registro    soma dos valores registrados
+  2023                    5                          162366
+  2024                    5                          168400
+  2025                    4                          173687

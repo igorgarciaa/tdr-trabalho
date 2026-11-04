@@ -1,0 +1,12 @@
+# Gerado pelo pipeline e pela renderização
+_targets/
+relatorio.html
+relatorio_files/
+analise.html
+analise_files/
+
+# Sessão de R
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/

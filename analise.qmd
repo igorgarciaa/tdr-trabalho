@@ -1,0 +1,206 @@
+---
+title: "Consultas nas unidades básicas de saúde de um município"
+author: "Igor Garcia"
+lang: pt-BR
+format:
+  html:
+    embed-resources: true
+execute:
+  echo: true
+---
+
+```{r}
+#| label: pacotes
+#| message: false
+library(tidyverse)
+```
+
+## Exercício 1: O documento e a leitura
+
+No terminal, `file -i dados/*.csv` mostra que o cadastro está em
+`iso-8859-1` (latin1) e os arquivos anuais em `us-ascii`. Em todos, o
+separador de campos é o ponto e vírgula. Os valores anuais são inteiros,
+sem separador decimal, e o mês sem registro aparece como `-`. Por isso a
+leitura usa `read_csv2()`, que assume `;` como separador e vírgula como
+decimal, com a codificação latin1 declarada no cadastro e o `-` declarado
+como ausência nos arquivos anuais.
+
+```{r}
+#| label: ler-cadastro
+cadastro <- read_csv2("dados/cadastro.csv",
+                      locale = locale(encoding = "latin1"),
+                      col_types = cols(codigo = col_character(),
+                                       nome = col_character(),
+                                       distrito = col_character(),
+                                       equipes = col_double()))
+cadastro
+```
+
+```{r}
+meses <- c("jan", "fev", "mar", "abr", "mai", "jun",
+           "jul", "ago", "set", "out", "nov", "dez")
+
+consultas_2023 <- read_csv2("dados/consultas_2023.csv", na = "-",
+                            col_types = cols(codigo = col_character(),
+                                             .default = col_double()))
+consultas_2023
+```
+
+## Exercício 2: Arrumar a tabela
+
+```{r}
+#| label: pivotar
+longo <- consultas_2023 |>
+  pivot_longer(cols = jan:dez, names_to = "mes", values_to = "consultas") |>
+  mutate(mes = factor(mes, levels = meses))
+longo
+```
+
+```{r}
+#| label: conferir-longo
+nrow(longo)
+sum(is.na(longo$consultas))
+```
+
+## Exercício 3: Juntar ao cadastro
+
+A tabela longa é a da esquerda e todas as suas linhas devem ficar, então a
+junção é `left_join()`. Cada código aparece várias vezes na tabela longa e
+uma vez no cadastro, então a relação esperada é `"many-to-one"`.
+
+```{r}
+#| label: juntar
+juntado <- longo |>
+  left_join(cadastro, by = join_by(codigo), relationship = "many-to-one") |>
+  mutate(consultas_equipe = consultas / equipes)
+
+c(antes = nrow(longo), depois = nrow(juntado))
+juntado
+```
+
+Unidade do cadastro sem medição alguma:
+
+```{r}
+#| label: sem-medicao
+sem_medicao <- cadastro |>
+  anti_join(consultas_2023, by = join_by(codigo))
+sem_medicao
+```
+A unidade sem medição é a `r sem_medicao$nome`.
+
+## Exercício 4: Resumir por grupo
+
+Um mês sem registro em uma UBS é uma informação que não chegou, e não um
+mês em que a unidade fez zero consultas. Por isso os ausentes **não** são
+trocados por zero: o total soma só os meses registrados (`na.rm = TRUE`) e a
+média relativa é calculada sobre os meses com registro.
+
+```{r}
+#| label: resumo-unidade
+por_unidade <- juntado |>
+  summarise(meses_registrados = sum(!is.na(consultas)),
+            total = sum(consultas, na.rm = TRUE),
+            media_consultas_equipe = mean(consultas_equipe, na.rm = TRUE),
+            .by = c(codigo, nome, distrito)) |>
+  arrange(desc(media_consultas_equipe))
+por_unidade
+```
+
+```{r}
+#| label: resumo-distrito
+por_distrito <- juntado |>
+  summarise(unidades = n_distinct(codigo),
+            total = sum(consultas, na.rm = TRUE),
+            media_consultas_equipe = mean(consultas_equipe, na.rm = TRUE),
+            .by = distrito)
+por_distrito
+```
+
+A decisão afeta a coluna `media_consultas_equipe`: trocar o ausente por zero
+puxaria para baixo a média das unidades com meses sem registro. Ela não
+afeta a coluna `total`, porque somar zero ou ignorar o mês dá o mesmo
+resultado.
+
+Em 2023, as unidades registraram
+`r format(sum(por_distrito$total), big.mark = ".", decimal.mark = ",")`
+consultas.
+
+## Exercício 5: Todos os anos de uma vez
+
+```{r}
+#| label: ler-todos
+arquivos <- list.files("dados", pattern = "^consultas_\\d{4}\\.csv$",
+                       full.names = TRUE)
+
+empilhado <- arquivos |>
+  set_names(basename) |>
+  map(\(a) read_csv2(a, na = "-",
+                     col_types = cols(codigo = col_character(),
+                                      .default = col_double()))) |>
+  list_rbind(names_to = "arquivo") |>
+  mutate(ano = parse_number(arquivo))
+empilhado
+```
+
+A cadeia dos Exercícios 2 e 3 serviu sem alteração porque o
+`pivot_longer()` seleciona as colunas com `jan:dez`. Com uma seleção do tipo
+`-codigo`, as colunas novas `arquivo` (texto) e `ano` entrariam no
+empilhamento e o `pivot_longer()` falharia por misturar texto com número. Os
+resumos, a partir daqui, precisam incluir `ano` no agrupamento.
+
+```{r}
+#| label: cadeia-todos
+juntado_todos <- empilhado |>
+  pivot_longer(cols = jan:dez, names_to = "mes", values_to = "consultas") |>
+  mutate(mes = factor(mes, levels = meses)) |>
+  left_join(cadastro, by = join_by(codigo), relationship = "many-to-one") |>
+  mutate(consultas_equipe = consultas / equipes)
+
+nrow(juntado_todos)
+
+juntado_todos |>
+  summarise(ausentes = sum(is.na(consultas)),
+            soma = sum(consultas, na.rm = TRUE),
+            .by = ano)
+```
+
+```{r}
+#| label: apresentacao
+apresentacao <- juntado_todos |>
+  summarise(total = sum(consultas, na.rm = TRUE), .by = c(distrito, ano)) |>
+  pivot_wider(names_from = ano, values_from = total)
+apresentacao
+
+apresentacao |>
+  summarise(across(-distrito, sum))
+```
+## Uso de IA neste trabalho
+
+Usei o Claude (Anthropic), um assistente de IA, durante a lista. Registro
+aqui o que ele fez e o que ficou sob minha responsabilidade.
+
+**O que forneci:** o enunciado da lista, o Capítulo 7 e a prática de
+Tidyverse, além dos cinco arquivos de `dados/` sorteados para o meu login.
+
+**O que a IA fez:**
+
+- inspecionou os arquivos (`file -i`, `head`) e identificou o separador, a
+  codificação de cada um e a marca de ausência `-`;
+- escreveu o código de leitura, pivotamento, junção, resumos e leitura em
+  lote, seguindo as funções do capítulo e da prática;
+- executou o código e conferiu os resultados com a seção *Conferência* do
+  `LEIA-ME.txt`: 12 unidades no cadastro, 11 com medições, ausentes e somas
+  de cada ano;
+- mostrou os dois erros que a lista antecipa: a leitura sem `na = "-"` e o
+  pivotamento com `cols = -codigo` na tabela empilhada;
+- propôs o tratamento dos meses sem registro e redigiu o texto deste
+  documento.
+
+**O que decidi e ajustei:** pedi que a leitura seguisse a prática, com
+`read_csv2()` no lugar de `read_delim()`. Mantive os meses sem registro como
+ausentes, e não como zero, porque um mês sem registro em uma UBS indica falta
+de informação, e não ausência de atendimento.
+
+**Como verifiquei:** rodei o documento com `quarto render` a partir dos dados
+originais, sem editar nenhum arquivo de `dados/`, e conferi que os totais e as
+contagens de ausentes reproduzem os valores do `LEIA-ME.txt`.
