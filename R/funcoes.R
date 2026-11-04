@@ -174,3 +174,10 @@ grafico_distritos <- function(dados) {
     labs(x = "Distrito", y = "Consultas por equipe no mês") +
     theme_minimal()
 }
+
+ajustar_modelo <- function(dados) {
+  lm(
+    log(consultas_equipe) ~ ano + mes + distrito,
+    data = filter(dados, consultas_equipe > 0)
+  )
+}
